@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-billor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-billor}
+      POSTGRES_DB: ${POSTGRES_DB:-billor_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-billor} -d ${POSTGRES_DB:-billor_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  server:
+    build: ./packages/server
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${SERVER_NODE_ENV:-development}
+      PORT: ${SERVER_PORT:-3000}
+      TYPEORM_HOST: db
+      TYPEORM_PORT: 5432
+      TYPEORM_USERNAME: ${POSTGRES_USER:-billor}
+      TYPEORM_PASSWORD: ${POSTGRES_PASSWORD:-billor}
+      TYPEORM_DATABASE: ${POSTGRES_DB:-billor_db}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+    ports:
+      - "${SERVER_PORT:-3000}:3000"
+    command: [ "sh", "-c", "npm run migration:run && node dist/main.js" ]
+
+  web:
+    build: ./packages/web
+    depends_on:
+      - server
+    environment:
+      VITE_API_BASE_URL: http://localhost:${SERVER_PORT:-3000}
+    ports:
+      - "5173:5173"
+    command: ["npm","run","dev","--","--host"]
+
+volumes:
+  pgdata:
